@@ -1,0 +1,66 @@
+name: $(Build.BuildId)
+
+trigger:
+  branches:
+    include:
+      - develop
+      - master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+- group: ACR_Secrets
+- name: imageName
+  value: 'fiap-cloud-games-iam'
+- name: dockerfilePath
+  value: '**/Dockerfile'
+
+steps:
+  - task: UseDotNet@2
+    displayName: 'Instalando .NET SDK'
+    inputs:
+      packageType: 'sdk'
+      version: '8.0.x'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Restaurando pacotes NuGet'
+    inputs:
+      command: 'restore'
+      projects: '**/*.csproj'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Compilando solução em Release'
+    inputs:
+      command: 'build'
+      projects: '**/*.csproj'
+      arguments: '--configuration Release'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Executando testes'
+    inputs:
+      command: 'test'
+      projects: '**/*.Tests.csproj'
+      arguments: '--configuration Release'
+
+  - task: Docker@2
+    displayName: 'Build & Push da imagem Docker - Develop'
+    condition: eq(variables['Build.SourceBranchName'], 'develop')
+    inputs:
+      containerRegistry: 'acr-fiap-connection'
+      repository: '$(imageName)'
+      command: 'buildAndPush'
+      Dockerfile: '$(dockerfilePath)'
+      tags: |
+        v$(Build.BuildId)   
+
+  - task: Docker@2
+    displayName: 'Build & Push da imagem Docker - Master'
+    condition: eq(variables['Build.SourceBranchName'], 'master')
+    inputs:
+      containerRegistry: 'acr-fiap-connection'
+      repository: '$(imageName)'
+      command: 'buildAndPush'
+      Dockerfile: '$(dockerfilePath)'
+      tags: |
+        latest

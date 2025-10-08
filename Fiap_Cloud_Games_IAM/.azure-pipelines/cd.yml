@@ -1,0 +1,68 @@
+trigger:
+  branches:
+    include:
+      - master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+- group: ACR_Secrets
+- name: imageName
+  value: 'fiap-cloud-games-iam'
+- name: imageTag
+  value: 'latest'
+- name: containerName
+  value: 'fiap-cloud-games-iam'
+- name: location
+  value: 'eastus'
+
+steps:
+- task: AzureCLI@2
+  displayName: 'Removendo container atual em ACI'
+  inputs:
+    azureSubscription: 'AzureConnection-CD'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      echo "Deletando container antigo..."
+      az container delete \
+        --resource-group $(ACR_RESOURCE_GROUP) \
+        --name $(containerName) \
+        --yes || true
+  env:
+    ACR_RESOURCE_GROUP: $(ACR_RESOURCE_GROUP)
+
+- task: AzureCLI@2
+  displayName: 'Criando novo container em ACI'
+  inputs:
+      azureSubscription: 'AzureConnection-CD'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        echo "Criando container com a imagem: $(imageTag)..."
+        az container create \
+          --resource-group $(ACR_RESOURCE_GROUP) \
+          --name $(containerName) \
+          --image $(ACR_NAME).azurecr.io/$(imageName):$(imageTag) \
+          --dns-name-label $(ACI_DNS_LABEL_IAM) \
+          --ports 80 \
+          --cpu 1 \
+          --memory 1.5 \
+          --registry-login-server $(ACR_NAME).azurecr.io \
+          --registry-username "$(ACR_USERNAME)" \
+          --registry-password "$(ACR_PASSWORD)" \
+          --location $(location) \
+          --os-type Linux \
+          --restart-policy Always \
+          --environment-variables "ServelessEmail__ServelessEmail=$(SERVERLESS_FUNCTION_URL)" "Urls__Gateway=$(GATEWAY_BASE_URL)" "Urls__ElasticBase=$(ELASTIC_BASE_URL)" "ElasticSearch__ApiKey=$(ELASTIC_API_KEY)"
+  env:
+    ACR_USERNAME: $(ACR_USERNAME)
+    ACR_PASSWORD: $(ACR_PASSWORD)
+    ACI_DNS_LABEL_IAM: $(ACI_DNS_LABEL_IAM)
+    ACR_RESOURCE_GROUP: $(ACR_RESOURCE_GROUP)
+    ACR_NAME: $(ACR_NAME)
+    GATEWAY_BASE_URL: $(GATEWAY_BASE_URL)
+    ELASTIC_BASE_URL: $(ELASTIC_BASE_URL)
+    ELASTIC_API_KEY: $(ELASTIC_API_KEY)
+    SERVERLESS_FUNCTION_URL: $(SERVERLESS_FUNCTION_URL)
